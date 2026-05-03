@@ -1,118 +1,204 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { supabase } from './lib/supabase';
+import { useAuth } from './hooks/useAuth';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
-// Pages
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
+// Layouts
 import DashboardLayout from './layouts/DashboardLayout';
-import PublicLayout from './layouts/PublicLayout';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AlumniDashboard from './pages/alumni/AlumniDashboard';
-import StudentDashboard from './pages/student/StudentDashboard';
+import PublicLayout    from './layouts/PublicLayout';
+
+// Public pages
+import Home           from './pages/Home';
+import Login          from './pages/Login';
+import Signup         from './pages/Signup';
 import AlumniDirectory from './pages/AlumniDirectory';
-import JobsPage from './pages/JobsPage';
-import EventsPage from './pages/EventsPage';
-import MentorshipPage from './pages/MentorshipPage';
-import AdminUsers from './pages/admin/AdminUsers';
-import AdminJobs from './pages/admin/AdminJobs';
-import AdminEvents from './pages/admin/AdminEvents';
+import JobsPage       from './pages/JobsPage';
+import EventsPage     from './pages/EventsPage';
 
-function App() {
-  const [session, setSession] = useState(null);
-  const [userRole, setUserRole] = useState(null);
-  const [loading, setLoading] = useState(true);
+// Dashboard pages
+import StudentDashboard from './pages/student/StudentDashboard';
+import AlumniDashboard  from './pages/alumni/AlumniDashboard';
+import MentorshipPage   from './pages/MentorshipPage';
+import MessagesPage     from './pages/MessagesPage';
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) fetchUserRole(session.user.id);
-      else setLoading(false);
-    });
+// Admin pages
+import AdminDashboard     from './pages/admin/AdminDashboard';
+import AdminUsers         from './pages/admin/AdminUsers';
+import AdminAlumniApproval from './pages/admin/AdminAlumniApproval';
+import AdminEvents        from './pages/admin/AdminEvents';
+import AdminGallery       from './pages/admin/AdminGallery';
+import AdminSettings      from './pages/admin/AdminSettings';
+import AdminPosts         from './pages/admin/AdminPosts';
+import AdminPeople        from './pages/admin/AdminPeople';
+import AdminFaculty       from './pages/admin/AdminFaculty';
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) fetchUserRole(session.user.id);
-      else {
-        setUserRole(null);
-        setLoading(false);
-      }
-    });
+// ─── Shared UI Pieces ──────────────────────────────────────────────────────
 
-    return () => subscription.unsubscribe();
-  }, []);
+const FullScreenLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-indigo-950">
+    <div className="flex flex-col items-center gap-4">
+      <div className="w-14 h-14 border-4 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
+      <p className="text-blue-300 font-medium tracking-wide">Verifying session...</p>
+    </div>
+  </div>
+);
 
-  const fetchUserRole = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .single();
-      
-      if (!error && data) {
-        setUserRole(data.role);
-      }
-    } catch (err) {
-      console.error('Error fetching role:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+const PendingApprovalPage = ({ onLogout }) => (
+  <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 p-4">
+    <div className="max-w-md w-full bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-10 text-center shadow-2xl">
+      <div className="w-20 h-20 rounded-full bg-yellow-400/20 border-2 border-yellow-400/40 flex items-center justify-center mx-auto mb-6">
+        <span className="text-4xl">⏳</span>
+      </div>
+      <h1 className="text-2xl font-extrabold text-white mb-3">Account Under Review</h1>
+      <p className="text-blue-200 leading-relaxed mb-8">
+        Your alumni account is being reviewed. Once an admin approves it, you'll get full access.
+      </p>
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-8 text-left space-y-3">
+        <p className="text-xs text-blue-300 font-semibold uppercase tracking-wider">What happens next?</p>
+        <p className="text-sm text-blue-200 flex items-center gap-2"><span className="text-green-400">✓</span> Profile saved</p>
+        <p className="text-sm text-blue-200 flex items-center gap-2"><span className="text-yellow-400">⏳</span> Admin reviews your status</p>
+        <p className="text-sm text-blue-200 flex items-center gap-2"><span className="text-blue-400">🔓</span> Full access on approval</p>
+      </div>
+      <button
+        onClick={onLogout}
+        className="w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-semibold transition-all"
+      >
+        Sign Out
+      </button>
+    </div>
+  </div>
+);
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-white">Loading...</div>;
-  }
+const AccountErrorPage = ({ onLogout }) => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900 p-4">
+    <div className="max-w-sm w-full bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 text-center">
+      <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
+        <span className="text-2xl">⚠️</span>
+      </div>
+      <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Account Error</h2>
+      <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">
+        Your account role could not be determined. This usually means your profile wasn't saved after signup. Please sign out and sign up again, or contact support.
+      </p>
+      <button
+        onClick={onLogout}
+        className="w-full px-6 py-3 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition-colors"
+      >
+        Sign Out
+      </button>
+    </div>
+  </div>
+);
 
-  const ProtectedRoute = ({ children, allowedRoles }) => {
-    if (!session) return <Navigate to="/login" />;
-    if (allowedRoles && !allowedRoles.includes(userRole)) return <Navigate to="/dashboard" />;
+// ─── App ──────────────────────────────────────────────────────────────────────
+export default function App() {
+  const {
+    session, userRole, loading,
+    isAdmin, isStudent, isApprovedAlumni, isPendingAlumni,
+    handleLogout,
+  } = useAuth();
+
+  // ─── Route Guards ──────────────────────────────────────────────────────
+  /** Redirects logged-out users to /login */
+  const ProtectedRoute = ({ children }) => {
+    if (loading)        return <FullScreenLoader />;
+    if (!session)       return <Navigate to="/login" replace />;
+    if (isPendingAlumni) return <PendingApprovalPage onLogout={handleLogout} />;
     return children;
   };
 
-  return (
-    <Router>
-      <Routes>
-        {/* Public Routes with Navbar and Footer */}
-        <Route element={<PublicLayout />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/directory" element={<AlumniDirectory />} />
-          <Route path="/jobs" element={<JobsPage />} />
-          <Route path="/events" element={<EventsPage />} />
-        </Route>
+  /** Admin-only routes */
+  const AdminRoute = ({ children }) => {
+    if (loading)           return <FullScreenLoader />;
+    if (!session)          return <Navigate to="/login" replace />;
+    if (!isAdmin)          return <Navigate to="/dashboard" replace />;
+    return children;
+  };
 
-          {/* Protected Routes */}
+  /** Redirects logged-in users away from public-only pages */
+  const PublicRoute = ({ children }) => {
+    if (loading) return <FullScreenLoader />;
+    if (session) {
+      if (isAdmin)          return <Navigate to="/admin" replace />;
+      if (isPendingAlumni)  return <PendingApprovalPage onLogout={handleLogout} />;
+      if (isApprovedAlumni) return <Navigate to="/dashboard/alumni" replace />;
+      if (isStudent)        return <Navigate to="/dashboard/student" replace />;
+    }
+    return children;
+  };
+
+  /** Smart home page — shows landing for guests, redirects for logged-in users */
+  const HomeRoute = () => {
+    if (loading) return <FullScreenLoader />;
+    if (session) {
+      if (isAdmin)          return <Navigate to="/admin" replace />;
+      if (isPendingAlumni)  return <PendingApprovalPage onLogout={handleLogout} />;
+      if (isApprovedAlumni) return <Navigate to="/dashboard/alumni" replace />;
+      if (isStudent)        return <Navigate to="/dashboard/student" replace />;
+    }
+    return <Home />;
+  };
+
+  /** /dashboard index — redirect to the correct role-specific sub-path */
+  const DashboardIndex = () => {
+    if (loading) return <FullScreenLoader />;
+    console.log(`[Route] DashboardIndex role:${userRole}`);
+
+    if (isAdmin)          return <Navigate to="/admin"            replace />;
+    if (isApprovedAlumni) return <Navigate to="/dashboard/alumni"   replace />;
+    if (isStudent)        return <Navigate to="/dashboard/student"  replace />;
+    if (isPendingAlumni)  return <PendingApprovalPage onLogout={handleLogout} />;
+
+    return <AccountErrorPage onLogout={handleLogout} />;
+  };
+
+  return (
+    <ErrorBoundary>
+      <Router>
+        <Routes>
+
+          {/* ── Public routes ────────────────────────────────────── */}
+          <Route element={<PublicLayout />}>
+            <Route path="/"          element={<HomeRoute />} />
+            <Route path="/login"     element={<PublicRoute><Login /></PublicRoute>} />
+            <Route path="/signup"    element={<PublicRoute><Signup /></PublicRoute>} />
+            <Route path="/directory" element={<AlumniDirectory />} />
+            <Route path="/jobs"      element={<JobsPage />} />
+            <Route path="/events"    element={<EventsPage />} />
+          </Route>
+
+          {/* ── Admin routes ─────────────────────────────────────── */}
+          <Route path="/admin" element={
+            <AdminRoute>
+              <DashboardLayout role="admin" basePath="/admin" />
+            </AdminRoute>
+          }>
+            <Route index element={<AdminDashboard />} />
+            <Route path="users"           element={<AdminUsers />} />
+            <Route path="people"          element={<AdminPeople />} />
+            <Route path="faculty"         element={<AdminFaculty />} />
+            <Route path="alumni-approval" element={<AdminAlumniApproval />} />
+            <Route path="events"          element={<AdminEvents />} />
+            <Route path="gallery"         element={<AdminGallery />} />
+            <Route path="settings"        element={<AdminSettings />} />
+            <Route path="posts"           element={<AdminPosts />} />
+            <Route path="mentorship"      element={<MentorshipPage />} />
+            <Route path="messages"        element={<MessagesPage />} />
+          </Route>
+
+          {/* ── User Dashboard routes ─────────────────────────────── */}
           <Route path="/dashboard" element={
             <ProtectedRoute>
-              <DashboardLayout role={userRole} />
+              <DashboardLayout role={userRole} basePath="/dashboard" />
             </ProtectedRoute>
           }>
-            <Route index element={
-              userRole === 'admin' ? <AdminDashboard /> :
-              userRole === 'alumni' ? <AlumniDashboard /> :
-              <StudentDashboard />
-            } />
-            
-            {/* Admin Routes */}
-            {userRole === 'admin' && (
-              <>
-                <Route path="users" element={<AdminUsers />} />
-                <Route path="jobs" element={<AdminJobs />} />
-                <Route path="events" element={<AdminEvents />} />
-              </>
-            )}
-            
-            {/* Shared Dashboard Routes */}
+            <Route index           element={<DashboardIndex />} />
+            <Route path="student"  element={<StudentDashboard />} />
+            <Route path="alumni"   element={<AlumniDashboard />} />
             <Route path="mentorship" element={<MentorshipPage />} />
+            <Route path="messages"   element={<MessagesPage />} />
           </Route>
+
         </Routes>
-    </Router>
+      </Router>
+    </ErrorBoundary>
   );
 }
-
-export default App;

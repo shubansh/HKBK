@@ -52,7 +52,7 @@ export default function AdminJobs() {
               </tr>
             </thead>
             <tbody>
-              {jobs.map((job) => (
+              {jobs?.map((job) => (
                 <tr key={job.id} className="border-b border-gray-200 dark:border-slate-700 last:border-0 hover:bg-gray-50 dark:bg-slate-700/50">
                   <td className="p-4">
                     <div className="font-medium text-gray-900 dark:text-white flex items-center gap-2">

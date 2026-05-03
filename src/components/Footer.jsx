@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom';
-import { Globe, Share2, Users, GraduationCap, MapPin, Mail } from 'lucide-react';
+import { Globe, Share2, Users, MapPin, Mail } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function Footer() {
+  const { theme } = useTheme();
+  
   const affiliations = [
     { name: 'AICTE', src: '/logos/affiliations/aicte.png', fallback: 'AICTE' },
     { name: 'VTU', src: '/logos/affiliations/vtu.png', fallback: 'VTU' },
@@ -18,7 +21,7 @@ export default function Footer() {
             Our Affiliations & Approvals
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 items-center justify-items-center">
-            {affiliations.map((logo) => (
+            {affiliations?.map((logo) => (
               <div 
                 key={logo.name}
                 className="group relative flex items-center justify-center w-32 h-16 grayscale hover:grayscale-0 transition-all duration-500 hover:scale-110"
@@ -49,10 +52,15 @@ export default function Footer() {
           {/* 1. About */}
           <div className="space-y-4">
             <Link to="/" className="flex items-center gap-2">
-              <div className="p-1.5 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-                <GraduationCap className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <span className="font-bold text-xl tracking-tight text-gray-900 dark:text-white">HKBK Connect</span>
+              <img 
+                src={theme === 'dark' ? '/logos/college/logo-white.png' : '/logos/college/logo.png'} 
+                alt="HKBK College Logo" 
+                className="h-8 w-auto object-contain hover:scale-105 transition-transform duration-300"
+                onError={(e) => {
+                  e.target.onerror = null; 
+                  e.target.src = "https://placehold.co/200x50/2563eb/ffffff?text=HKBK+Logo";
+                }}
+              />
             </Link>
             <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
               The official alumni network of HKBK College of Engineering. Fostering lifelong connections, mentorship, and career growth among our global graduate community.

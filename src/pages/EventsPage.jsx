@@ -52,11 +52,20 @@ export default function EventsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {events.map((event) => (
+          {events?.map((event) => (
             <div key={event.id} className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden hover:border-blue-600 dark:hover:border-blue-500 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 flex flex-col group">
               {event.image_url ? (
                 <div className="w-full h-48 overflow-hidden bg-gray-100 dark:bg-slate-900">
-                  <img src={event.image_url} alt={event.title} className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500" />
+                  <img 
+                    src={event.image_url} 
+                    alt={event.title} 
+                    className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500" 
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.style.display = 'none';
+                      e.target.parentElement.innerHTML = '<div class="w-full h-48 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-slate-800 dark:to-slate-700 flex flex-col items-center justify-center p-6 text-center"><span class="text-sm text-blue-800 dark:text-blue-200 font-medium opacity-70">HKBK Event</span></div>';
+                    }}
+                  />
                 </div>
               ) : (
                 <div className="w-full h-48 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-slate-800 dark:to-slate-700 flex flex-col items-center justify-center p-6 text-center">

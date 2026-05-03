@@ -1,25 +1,120 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Mail, Lock, ArrowRight, GraduationCap, Briefcase } from 'lucide-react';
+import { User, Mail, Lock, ArrowRight, GraduationCap, Briefcase, Building2, Calendar, BookOpen, Layers } from 'lucide-react';
 import toast from 'react-hot-toast';
+import AuthBackground from '../components/AuthBackground';
+
+const COURSE_DATA = {
+  "UG Engineering Programs": [
+    "Computer Science & Engineering",
+    "Electronics & Communication",
+    "Mechanical Engineering",
+    "Information Science Engineering",
+    "AI & Machine Learning",
+    "Basic Science"
+  ],
+  "Research Programs": [
+    "Ph.D. in CS", "Ph.D. in EC", "Ph.D. in ME", "Ph.D. in CV", 
+    "Ph.D. in Phy", "Ph.D. in Che", "Ph.D. in Mat", "Ph.D. in MBA"
+  ],
+  "3 Year Degree Programs": [
+    "B.Com", "B.Com + ACCA", "B.Com - Logistics", 
+    "B.B.A", "B.B.A + Logistics", "B.B.A - Aviation", 
+    "B.C.A", "B.C.A + Cloud", "B.Sc - Cyber Forensics"
+  ],
+  "Allied Health Sciences": [
+    "BPT", "BSc MLT", "BSc MIT"
+  ],
+  "Pre University (PUC)": [
+    "PCMB", "PCMC", "EBAC", "HEBA"
+  ]
+};
+
+const YEARS_OF_STUDY = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+
+const InputWrapper = ({ icon: Icon, children }) => (
+  <div className="relative group">
+    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-transform group-focus-within:scale-110">
+      <Icon className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+    </div>
+    {children}
+  </div>
+);
 
 export default function Signup() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
   const [role, setRole] = useState('student');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  // Form State
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    password: '',
+    courseCategory: '',
+    courseName: '',
+    yearOfStudy: '',
+    passoutYear: '',
+    company: '',
+    jobRole: ''
+  });
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ 
+      ...prev, 
+      [name]: value,
+      // Reset course name if category changes
+      ...(name === 'courseCategory' && { courseName: '' })
+    }));
+  };
+
+  const validateForm = () => {
+    if (!formData.fullName.trim()) return 'Full name is required';
+    if (!formData.email.trim() || !/\S+@\S+\.\S+/.test(formData.email)) return 'Valid email is required';
+    if (formData.password.length < 6) return 'Password must be at least 6 characters long';
+    if (!formData.courseCategory) return 'Please select a course category';
+    if (!formData.courseName) return 'Please select a specific course';
+    
+    if (role === 'student' && !formData.yearOfStudy) return 'Please select your year of study';
+    
+    if (role === 'alumni') {
+      const year = parseInt(formData.passoutYear);
+      const currentYear = new Date().getFullYear();
+      if (!year || year < 2000 || year > currentYear) return `Passout year must be between 2000 and ${currentYear}`;
+    }
+
+    return null; // Valid
+  };
+
   const handleSignup = async (e) => {
     e.preventDefault();
+    
+    const errorMsg = validateForm();
+    if (errorMsg) {
+      toast.error(errorMsg);
+      return;
+    }
+
     setLoading(true);
     
-    // 1. Sign up user
+    const userMetaData = {
+      full_name: formData.fullName,
+      role: role,
+      course_category: formData.courseCategory,
+      course_name: formData.courseName,
+      year_of_study: role === 'student' ? formData.yearOfStudy : null,
+      passout_year: role === 'alumni' ? parseInt(formData.passoutYear) : null,
+      company: role === 'alumni' ? formData.company || null : null,
+      job_title: role === 'alumni' ? formData.jobRole || null : null,
+    };
+
+    // 1. Sign up user — the DB trigger will auto-create the profile
     const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
+      email: formData.email,
+      password: formData.password,
+      options: { data: userMetaData }
     });
 
     if (signUpError) {
@@ -28,181 +123,227 @@ export default function Signup() {
       return;
     }
 
-    if (data?.user) {
-      // 2. Create profile entry
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([
-          {
-            id: data.user.id,
-            full_name: fullName,
-            role: role,
-            status: role === 'alumni' ? 'pending' : 'approved',
-            email: email
-          }
-        ]);
-
-      if (profileError) {
-        toast.error(profileError.message);
-      } else {
-        toast.success(role === 'alumni' ? 'Account created! Waiting for admin approval.' : 'Welcome to HKBK Connect!');
-        navigate('/dashboard');
-      }
+    if (!data?.user) {
+      toast.error('Signup failed. Please try again.');
+      setLoading(false);
+      return;
     }
+
+    // 2. Wait briefly for Supabase session to propagate, then upsert as safety net
+    // The DB trigger should have created the profile already; this is a fallback.
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const profilePayload = {
+      id: data.user.id,
+      email: formData.email,
+      full_name: formData.fullName,
+      role: role,
+      is_approved: role === 'alumni' ? false : true,
+      status: role === 'alumni' ? 'pending' : 'approved',
+      course_category: formData.courseCategory,
+      course_name: formData.courseName,
+      year_of_study: role === 'student' ? formData.yearOfStudy : null,
+      passout_year: role === 'alumni' ? parseInt(formData.passoutYear) : null,
+      company: role === 'alumni' ? formData.company || null : null,
+      job_title: role === 'alumni' ? formData.jobRole || null : null,
+    };
+
+    console.log('[Signup] Upserting profile payload:', profilePayload);
+
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .upsert(profilePayload, { onConflict: 'id' });
+
+    if (profileError) {
+      console.error('[Signup] Profile upsert failed (attempt 1):', profileError);
+      
+      // Retry once after another short delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const { error: retryError } = await supabase
+        .from('profiles')
+        .upsert(profilePayload, { onConflict: 'id' });
+
+      if (retryError) {
+        console.error('[Signup] Profile upsert failed (attempt 2):', retryError);
+        // The DB trigger should have created the profile, so we still navigate.
+        // The error is non-fatal since the trigger is the primary mechanism.
+        toast.success(
+          role === 'alumni'
+            ? 'Account created! Waiting for admin approval.'
+            : 'Welcome to HKBK Connect!',
+          { duration: 5000 }
+        );
+      } else {
+        toast.success(
+          role === 'alumni'
+            ? 'Alumni account created! Waiting for admin approval.'
+            : 'Welcome to HKBK Connect! Account created successfully.',
+          { duration: 5000 }
+        );
+      }
+    } else {
+      toast.success(
+        role === 'alumni'
+          ? 'Alumni account created! Waiting for admin approval.'
+          : 'Welcome to HKBK Connect! Account created successfully.',
+        { duration: 5000 }
+      );
+    }
+
+    navigate('/dashboard');
     setLoading(false);
   };
 
-  const handleGoogleSignup = async () => {
-    // In a real app, you would configure Google OAuth in Supabase dashboard
-    toast.error('Google OAuth requires Supabase dashboard configuration first.');
-  };
 
   return (
     <div className="min-h-screen flex bg-gray-50 dark:bg-slate-900">
-      {/* Left side - Image/Illustration */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-blue-600 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-indigo-900 z-10 opacity-90" />
-        <img 
-          src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80" 
-          alt="Campus" 
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div className="relative z-20 flex flex-col justify-center p-16 text-white h-full">
-          <div className="p-3 bg-white/10 rounded-2xl w-fit backdrop-blur-sm border border-white/20 mb-8">
-            <GraduationCap className="w-10 h-10" />
-          </div>
-          <h1 className="text-5xl font-extrabold mb-6 leading-tight">
-            Join the global <br/> HKBK network.
-          </h1>
-          <p className="text-xl text-blue-100 max-w-md leading-relaxed">
-            Connect with thousands of graduates, unlock exclusive job opportunities, and find lifelong mentorship.
+      <AuthBackground
+        title={<>Join the <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-200 to-purple-200">HKBK Network.</span></>}
+        subtitle={role === 'student'
+          ? 'Connect with alumni, find mentorship, and unlock exclusive opportunities tailored for your growth.'
+          : 'Give back to the community, hire top talent, and stay connected with your alma mater.'}
+      />
+
+      {/* Right side - Glassmorphism Form */}
+      <div className="w-full lg:w-7/12 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-20 xl:px-32 relative overflow-y-auto">
+        <div className="absolute top-0 right-0 p-8 hidden md:block">
+          <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
+            Already have an account?{' '}
+            <Link to="/login" className="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors">
+              Sign in
+            </Link>
           </p>
         </div>
-      </div>
 
-      {/* Right side - Form */}
-      <div className="w-full lg:w-1/2 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-20 xl:px-24">
-        <div className="mx-auto w-full max-w-sm lg:max-w-md">
-          <div className="text-center lg:text-left mb-10">
-            <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white">
-              Create an account
-            </h2>
+        <div className="mx-auto w-full max-w-xl my-auto">
+          <div className="text-left mb-10 md:hidden pt-8">
+            <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">Create account</h2>
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              Already have an account?{' '}
-              <Link to="/login" className="font-semibold text-blue-600 hover:text-blue-500 dark:text-blue-400">
-                Sign in instead
-              </Link>
+              Already have an account? <Link to="/login" className="font-semibold text-blue-600">Sign in</Link>
             </p>
           </div>
 
-          <div className="bg-white dark:bg-slate-800 p-8 shadow-xl shadow-blue-900/5 rounded-2xl border border-gray-100 dark:border-slate-700">
-            <button
-              onClick={handleGoogleSignup}
-              className="w-full flex justify-center items-center gap-3 py-2.5 px-4 border border-gray-300 dark:border-slate-600 rounded-xl shadow-sm bg-white dark:bg-slate-900 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors mb-6"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  fill="#4285F4"
-                />
-                <path
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  fill="#34A853"
-                />
-                <path
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                  fill="#FBBC05"
-                />
-                <path
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  fill="#EA4335"
-                />
-              </svg>
-              Sign up with Google
-            </button>
-
-            <div className="relative mb-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200 dark:border-slate-700" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white dark:bg-slate-800 text-gray-500">Or continue with email</span>
+          <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl p-8 sm:p-10 shadow-2xl shadow-blue-900/5 rounded-3xl border border-gray-100 dark:border-slate-800">
+            <div className="mb-10">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4">I am joining as a</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <label className={`relative flex cursor-pointer rounded-2xl border-2 p-5 transition-all duration-300 hover:shadow-md ${role === 'student' ? 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-600 shadow-blue-600/10' : 'border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-gray-200 dark:hover:border-slate-600'}`}>
+                  <input type="radio" value="student" checked={role === 'student'} onChange={(e) => setRole(e.target.value)} className="sr-only" />
+                  <div className="flex flex-col items-center justify-center w-full">
+                    <GraduationCap className={`w-7 h-7 mb-3 transition-colors ${role === 'student' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    <span className={`text-sm font-bold ${role === 'student' ? 'text-blue-900 dark:text-blue-200' : 'text-gray-600 dark:text-gray-300'}`}>Student</span>
+                  </div>
+                </label>
+                
+                <label className={`relative flex cursor-pointer rounded-2xl border-2 p-5 transition-all duration-300 hover:shadow-md ${role === 'alumni' ? 'bg-purple-50/50 dark:bg-purple-900/10 border-purple-600 shadow-purple-600/10' : 'border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-gray-200 dark:hover:border-slate-600'}`}>
+                  <input type="radio" value="alumni" checked={role === 'alumni'} onChange={(e) => setRole(e.target.value)} className="sr-only" />
+                  <div className="flex flex-col items-center justify-center w-full">
+                    <Briefcase className={`w-7 h-7 mb-3 transition-colors ${role === 'alumni' ? 'text-purple-600' : 'text-gray-400'}`} />
+                    <span className={`text-sm font-bold ${role === 'alumni' ? 'text-purple-900 dark:text-purple-200' : 'text-gray-600 dark:text-gray-300'}`}>Alumni</span>
+                  </div>
+                </label>
               </div>
             </div>
 
-            <form className="space-y-5" onSubmit={handleSignup}>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  I am joining as a...
-                </label>
-                <div className="grid grid-cols-2 gap-4">
-                  <label className={`relative flex cursor-pointer rounded-xl border p-4 shadow-sm focus:outline-none transition-colors ${role === 'student' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-600 dark:border-blue-500' : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900'}`}>
-                    <input type="radio" value="student" checked={role === 'student'} onChange={(e) => setRole(e.target.value)} className="sr-only" />
-                    <div className="flex flex-col items-center justify-center w-full">
-                      <GraduationCap className={`w-6 h-6 mb-2 ${role === 'student' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}`} />
-                      <span className={`text-sm font-semibold ${role === 'student' ? 'text-blue-900 dark:text-blue-200' : 'text-gray-900 dark:text-white'}`}>Student</span>
-                    </div>
-                  </label>
-                  <label className={`relative flex cursor-pointer rounded-xl border p-4 shadow-sm focus:outline-none transition-colors ${role === 'alumni' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-600 dark:border-blue-500' : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900'}`}>
-                    <input type="radio" value="alumni" checked={role === 'alumni'} onChange={(e) => setRole(e.target.value)} className="sr-only" />
-                    <div className="flex flex-col items-center justify-center w-full">
-                      <Briefcase className={`w-6 h-6 mb-2 ${role === 'alumni' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}`} />
-                      <span className={`text-sm font-semibold ${role === 'alumni' ? 'text-blue-900 dark:text-blue-200' : 'text-gray-900 dark:text-white'}`}>Alumni</span>
-                    </div>
-                  </label>
-                </div>
+            <form className="space-y-5 animate-in fade-in duration-500" onSubmit={handleSignup}>
+              {/* Common Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <InputWrapper icon={User}>
+                  <input type="text" name="fullName" required placeholder="Full Name" value={formData.fullName} onChange={handleChange}
+                    className="block w-full pl-12 pr-4 py-3.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-all"
+                  />
+                </InputWrapper>
+
+                <InputWrapper icon={Mail}>
+                  <input type="email" name="email" required placeholder="Email Address" value={formData.email} onChange={handleChange}
+                    className="block w-full pl-12 pr-4 py-3.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-all"
+                  />
+                </InputWrapper>
               </div>
 
-              <div className="space-y-4">
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Full Name"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-shadow"
-                  />
-                </div>
+              <InputWrapper icon={Lock}>
+                <input type="password" name="password" required placeholder="Create Password (min 6 chars)" value={formData.password} onChange={handleChange}
+                  className="block w-full pl-12 pr-4 py-3.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-all"
+                />
+              </InputWrapper>
 
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    type="email"
-                    required
-                    placeholder="Email address"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-shadow"
-                  />
-                </div>
+              <div className="h-px bg-gray-100 dark:bg-slate-800 my-6"></div>
 
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Create a password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-shadow"
-                  />
-                </div>
+              {/* Course Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <InputWrapper icon={BookOpen}>
+                  <select name="courseCategory" required value={formData.courseCategory} onChange={handleChange}
+                    className={`block w-full pl-12 pr-10 py-3.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50/50 dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-all appearance-none ${!formData.courseCategory ? 'text-gray-400' : 'text-gray-900 dark:text-white'}`}
+                  >
+                    <option value="" disabled>Course Category</option>
+                    {Object.keys(COURSE_DATA).map(cat => <option key={cat} value={cat} className="text-gray-900 dark:text-white">{cat}</option>)}
+                  </select>
+                </InputWrapper>
+
+                <InputWrapper icon={Layers}>
+                  <select name="courseName" required value={formData.courseName} onChange={handleChange} disabled={!formData.courseCategory}
+                    className={`block w-full pl-12 pr-10 py-3.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50/50 dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-all appearance-none ${!formData.courseName ? 'text-gray-400' : 'text-gray-900 dark:text-white'} disabled:opacity-50`}
+                  >
+                    <option value="" disabled>Specific Course</option>
+                    {formData.courseCategory && COURSE_DATA[formData.courseCategory].map(course => (
+                      <option key={course} value={course} className="text-gray-900 dark:text-white">{course}</option>
+                    ))}
+                  </select>
+                </InputWrapper>
               </div>
+
+              {/* Dynamic Fields based on Role */}
+              {role === 'student' && (
+                <div className="animate-in fade-in slide-in-from-top-4 duration-500">
+                  <InputWrapper icon={Calendar}>
+                    <select name="yearOfStudy" required value={formData.yearOfStudy} onChange={handleChange}
+                      className={`block w-full pl-12 pr-10 py-3.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50/50 dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm transition-all appearance-none ${!formData.yearOfStudy ? 'text-gray-400' : 'text-gray-900 dark:text-white'}`}
+                    >
+                      <option value="" disabled>Current Year of Study</option>
+                      {YEARS_OF_STUDY.map(year => <option key={year} value={year} className="text-gray-900 dark:text-white">{year}</option>)}
+                    </select>
+                  </InputWrapper>
+                </div>
+              )}
+
+              {role === 'alumni' && (
+                <div className="space-y-5 animate-in fade-in slide-in-from-top-4 duration-500">
+                  <InputWrapper icon={Calendar}>
+                    <input type="number" name="passoutYear" required placeholder="Passout Year (e.g. 2021)" min="2000" max={new Date().getFullYear()} value={formData.passoutYear} onChange={handleChange}
+                      className="block w-full pl-12 pr-4 py-3.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent sm:text-sm transition-all"
+                    />
+                  </InputWrapper>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <InputWrapper icon={Building2}>
+                      <input type="text" name="company" placeholder="Current Company (Optional)" value={formData.company} onChange={handleChange}
+                        className="block w-full pl-12 pr-4 py-3.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent sm:text-sm transition-all"
+                      />
+                    </InputWrapper>
+
+                    <InputWrapper icon={Briefcase}>
+                      <input type="text" name="jobRole" placeholder="Job Role (Optional)" value={formData.jobRole} onChange={handleChange}
+                        className="block w-full pl-12 pr-4 py-3.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent sm:text-sm transition-all"
+                      />
+                    </InputWrapper>
+                  </div>
+                </div>
+              )}
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all duration-300 hover:scale-[1.02]"
+                className={`w-full flex justify-center items-center gap-2 py-3.5 px-4 rounded-xl shadow-lg text-sm font-bold text-white transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-70 disabled:hover:translate-y-0 ${
+                  role === 'student' 
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-500/20' 
+                    : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-purple-500/20'
+                }`}
               >
-                {loading ? 'Creating account...' : 'Create account'} <ArrowRight className="w-4 h-4" />
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  <>Create Account <ArrowRight className="w-4 h-4" /></>
+                )}
               </button>
             </form>
           </div>

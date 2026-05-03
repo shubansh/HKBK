@@ -1,17 +1,21 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Calendar, MapPin, Trash2, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Calendar, MapPin, Trash2, Image as ImageIcon, Loader2, Plus, X, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
+import ImageUpload from '../../components/ImageUpload';
+
+const EMPTY_FORM = { title: '', description: '', date: '', location: '', image_url: '' };
 
 export default function AdminEvents() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [newEvent, setNewEvent] = useState({ title: '', description: '', date: '', location: '' });
-  const [imageFile, setImageFile] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [editingId, setEditingId] = useState(null);
 
   const fetchEvents = async () => {
+    setLoading(true);
     const { data, error } = await supabase
       .from('events')
       .select('*')
@@ -19,55 +23,64 @@ export default function AdminEvents() {
     
     if (!error && data) {
       setEvents(data);
+    } else if (error) {
+      toast.error('Failed to load events: ' + error.message);
     }
     setLoading(false);
   };
 
   useEffect(() => {
     fetchEvents();
+    
+    const subscription = supabase
+      .channel('public:events')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, fetchEvents)
+      .subscribe();
+
+    return () => supabase.removeChannel(subscription);
   }, []);
 
-  const handleCreateEvent = async (e) => {
+  const handleEditEvent = (event) => {
+    setForm({
+      title: event.title,
+      description: event.description,
+      date: new Date(event.date).toISOString().slice(0, 16),
+      location: event.location,
+      image_url: event.image_url || ''
+    });
+    setEditingId(event.id);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    const { data: { session } } = await supabase.auth.getSession();
     
+    const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       toast.error('You must be logged in.');
       setIsSubmitting(false);
       return;
     }
 
-    let imageUrl = null;
+    const payload = { 
+      ...form,
+      organizer_id: session.user.id 
+    };
 
-    if (imageFile) {
-      const fileExt = imageFile.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${fileName}`;
-
-      const { error: uploadError, data } = await supabase.storage
-        .from('event-images')
-        .upload(filePath, imageFile);
-
-      if (uploadError) {
-        toast.error(`Image upload failed: ${uploadError.message}. Make sure the 'event-images' bucket exists and is public.`);
-      } else {
-        const { data: { publicUrl } } = supabase.storage
-          .from('event-images')
-          .getPublicUrl(filePath);
-        imageUrl = publicUrl;
-      }
+    let error;
+    if (editingId) {
+      ({ error } = await supabase.from('events').update(payload).eq('id', editingId));
+    } else {
+      ({ error } = await supabase.from('events').insert([payload]));
     }
-
-    const { error } = await supabase
-      .from('events')
-      .insert([{ ...newEvent, organizer_id: session.user.id, image_url: imageUrl }]);
     
     if (!error) {
-      toast.success('Event created successfully!');
-      setIsCreating(false);
-      setNewEvent({ title: '', description: '', date: '', location: '' });
-      setImageFile(null);
+      toast.success(editingId ? 'Event updated!' : 'Event created!');
+      setShowForm(false);
+      setEditingId(null);
+      setForm(EMPTY_FORM);
       fetchEvents();
     } else {
       toast.error(error.message);
@@ -75,84 +88,101 @@ export default function AdminEvents() {
     setIsSubmitting(false);
   };
 
-  const handleDeleteEvent = async (eventId) => {
-    if (confirm('Are you sure you want to delete this event?')) {
-      const { error } = await supabase
-        .from('events')
-        .delete()
-        .eq('id', eventId);
-      
-      if (!error) {
-        toast.success('Event deleted');
-        fetchEvents();
-      } else {
-        toast.error(error.message);
+  const handleDeleteEvent = async (event) => {
+    if (!confirm('Are you sure you want to delete this event?')) return;
+    
+    const { error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', event.id);
+    
+    if (!error) {
+      // Storage cleanup
+      if (event.image_url) {
+        try {
+          const parts = event.image_url.split('/');
+          const file = parts[parts.length - 1];
+          await supabase.storage.from('event-images').remove([file]);
+        } catch (_) {}
       }
+      toast.success('Event deleted');
+      fetchEvents();
+    } else {
+      toast.error(error.message);
     }
   };
 
-  if (loading) return <div>Loading events...</div>;
+  if (loading && events.length === 0) return (
+    <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
+  );
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Manage Events</h1>
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Calendar className="w-6 h-6 text-blue-600" /> Manage Events
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Create and manage upcoming college events.</p>
+        </div>
         <button 
-          onClick={() => setIsCreating(!isCreating)}
-          className="bg-blue-600 dark:bg-blue-500 text-white px-4 py-2 rounded-md font-medium hover:opacity-90 transition-opacity"
+          onClick={() => {
+            setShowForm(!showForm);
+            if (!showForm) {
+              setEditingId(null);
+              setForm(EMPTY_FORM);
+            }
+          }}
+          className="bg-blue-600 dark:bg-blue-500 text-white px-4 py-2 rounded-md font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
         >
-          {isCreating ? 'Cancel' : 'Create Event'}
+          {showForm ? <><X className="w-4 h-4" /> Cancel</> : <><Plus className="w-4 h-4" /> Create Event</>}
         </button>
       </div>
 
-      {isCreating && (
+      {showForm && (
         <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-6 mb-8 shadow-sm">
-          <h2 className="text-xl font-bold mb-4">Create New Event</h2>
-          <form onSubmit={handleCreateEvent} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Title</label>
-              <input 
-                required
-                type="text" 
-                value={newEvent.title}
-                onChange={(e) => setNewEvent({...newEvent, title: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-gray-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" 
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium mb-1">Event Image</label>
-              <div className="flex items-center gap-4">
-                <label className="flex items-center justify-center w-full h-32 px-4 transition bg-gray-50 dark:bg-slate-900 border-2 border-gray-300 dark:border-slate-600 border-dashed rounded-md appearance-none cursor-pointer hover:border-gray-400 focus:outline-none">
-                  <span className="flex items-center space-x-2">
-                    <ImageIcon className="w-6 h-6 text-gray-400" />
-                    <span className="font-medium text-gray-500 dark:text-gray-400">
-                      {imageFile ? imageFile.name : 'Drop image to attach, or browse'}
-                    </span>
-                  </span>
-                  <input type="file" name="file_upload" className="hidden" accept="image/*" onChange={(e) => setImageFile(e.target.files[0])} />
-                </label>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Description</label>
-              <textarea 
-                required
-                value={newEvent.description}
-                onChange={(e) => setNewEvent({...newEvent, description: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-gray-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" 
-                rows={3}
-              />
-            </div>
+          <h2 className="text-xl font-bold mb-4">{editingId ? 'Edit Event' : 'Create New Event'}</h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-sm font-medium mb-1">Title</label>
+                <input 
+                  required
+                  type="text" 
+                  value={form.title}
+                  onChange={(e) => setForm({...form, title: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-gray-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" 
+                />
+              </div>
+              
+              <div className="col-span-2">
+                <ImageUpload
+                  bucket="event-images"
+                  currentUrl={form.image_url}
+                  onUpload={(url) => setForm({...form, image_url: url})}
+                  label="Event Header Image"
+                  maxSizeMB={2}
+                />
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <textarea 
+                  required
+                  value={form.description}
+                  onChange={(e) => setForm({...form, description: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-gray-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" 
+                  rows={3}
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Date & Time</label>
                 <input 
                   required
                   type="datetime-local" 
-                  value={newEvent.date}
-                  onChange={(e) => setNewEvent({...newEvent, date: e.target.value})}
+                  value={form.date}
+                  onChange={(e) => setForm({...form, date: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-gray-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" 
                 />
               </div>
@@ -161,8 +191,8 @@ export default function AdminEvents() {
                 <input 
                   required
                   type="text" 
-                  value={newEvent.location}
-                  onChange={(e) => setNewEvent({...newEvent, location: e.target.value})}
+                  value={form.location}
+                  onChange={(e) => setForm({...form, location: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-gray-50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" 
                 />
               </div>
@@ -172,19 +202,28 @@ export default function AdminEvents() {
               disabled={isSubmitting}
               className="bg-blue-600 dark:bg-blue-500 text-white px-6 py-2 rounded-md font-medium flex items-center gap-2 hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
-              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isSubmitting ? 'Saving...' : 'Save Event'}
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {isSubmitting ? 'Saving...' : (editingId ? 'Update Event' : 'Save Event')}
             </button>
           </form>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {events.map((event) => (
+        {events?.map((event) => (
           <div key={event.id} className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden flex flex-col group hover:shadow-lg transition-all duration-300">
             {event.image_url ? (
               <div className="w-full h-48 overflow-hidden bg-gray-100 dark:bg-slate-900">
-                <img src={event.image_url} alt={event.title} className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500" />
+                <img 
+                  src={event.image_url} 
+                  alt={event.title} 
+                  className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500" 
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.style.display = 'none';
+                    e.target.parentElement.innerHTML = '<div class="w-full h-48 bg-gray-100 dark:bg-slate-900 flex items-center justify-center"><span class="text-sm text-gray-500 dark:text-gray-400">No Image</span></div>';
+                  }}
+                />
               </div>
             ) : (
               <div className="w-full h-48 bg-gray-100 dark:bg-slate-900 flex items-center justify-center">
@@ -206,17 +245,23 @@ export default function AdminEvents() {
                 </div>
               </div>
             </div>
-            <div className="bg-gray-50 dark:bg-slate-700/50 p-4 border-t border-gray-200 dark:border-slate-700 flex justify-end">
+            <div className="bg-gray-50 dark:bg-slate-700/50 p-4 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
               <button 
-                onClick={() => handleDeleteEvent(event.id)}
-                className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 p-2 rounded-md flex items-center gap-2 transition-colors text-sm font-medium"
+                onClick={() => handleEditEvent(event)}
+                className="text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 px-3 py-2 rounded-md transition-colors text-sm font-medium"
+              >
+                Edit
+              </button>
+              <button 
+                onClick={() => handleDeleteEvent(event)}
+                className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 px-3 py-2 rounded-md flex items-center gap-2 transition-colors text-sm font-medium"
               >
                 <Trash2 className="w-4 h-4" /> Delete
               </button>
             </div>
           </div>
         ))}
-        {events.length === 0 && (
+        {events.length === 0 && !loading && (
           <div className="col-span-full text-center py-12 text-gray-500 dark:text-gray-400 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl">
             No events scheduled. Create one above!
           </div>
