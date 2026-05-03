@@ -1,21 +1,90 @@
 import { motion } from 'framer-motion';
-import { Mail, MapPin, Phone, MessageSquare, Send } from 'lucide-react';
+import { Mail, MapPin, Phone, MessageSquare, Send, Loader2, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 export default function ContactPage() {
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    subject: '',
+    message: ''
+  });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      toast.success('Message sent! We will get back to you soon.');
-      setLoading(false);
-      e.target.reset();
-    }, 1500);
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+
+  const validateEmail = (email) => {
+    return String(email)
+      .toLowerCase()
+      .match(
+        /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+      );
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!formData.name || !formData.email || !formData.subject || !formData.message) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    if (!validateEmail(formData.email)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      const { error } = await supabase
+        .from('contact_messages')
+        .insert([formData]);
+
+      if (error) throw error;
+
+      setSubmitted(true);
+      toast.success('Message sent successfully!');
+      setFormData({ name: '', email: '', subject: '', message: '' });
+    } catch (error) {
+      console.error('Contact form error:', error);
+      toast.error('Failed to send message. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center pt-20 pb-32">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-md w-full bg-white dark:bg-slate-900 p-12 rounded-[3rem] border border-gray-100 dark:border-slate-800 text-center shadow-2xl shadow-blue-500/5"
+        >
+          <div className="w-20 h-20 bg-green-50 dark:bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-8">
+            <CheckCircle2 className="w-10 h-10 text-green-500" />
+          </div>
+          <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-4">Message Sent!</h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-8 leading-relaxed">
+            Thank you for reaching out. Our team has received your message and will get back to you at {formData.email} within 24-48 hours.
+          </p>
+          <button 
+            onClick={() => setSubmitted(false)}
+            className="px-8 py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20"
+          >
+            Send Another Message
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-20 pb-32">
@@ -114,6 +183,9 @@ export default function ContactPage() {
                   <input 
                     required
                     type="text" 
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
                     className="w-full px-6 py-4 rounded-2xl bg-gray-50 dark:bg-slate-800 border-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-900 dark:text-white"
                     placeholder="John Doe"
                   />
@@ -123,6 +195,9 @@ export default function ContactPage() {
                   <input 
                     required
                     type="email" 
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
                     className="w-full px-6 py-4 rounded-2xl bg-gray-50 dark:bg-slate-800 border-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-900 dark:text-white"
                     placeholder="john@example.com"
                   />
@@ -134,6 +209,9 @@ export default function ContactPage() {
                 <input 
                   required
                   type="text" 
+                  name="subject"
+                  value={formData.subject}
+                  onChange={handleChange}
                   className="w-full px-6 py-4 rounded-2xl bg-gray-50 dark:bg-slate-800 border-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-900 dark:text-white"
                   placeholder="How can we help?"
                 />
@@ -143,6 +221,9 @@ export default function ContactPage() {
                 <label className="text-sm font-bold text-gray-700 dark:text-gray-300 ml-1">Message</label>
                 <textarea 
                   required
+                  name="message"
+                  value={formData.message}
+                  onChange={handleChange}
                   rows="5"
                   className="w-full px-6 py-4 rounded-2xl bg-gray-50 dark:bg-slate-800 border-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-900 dark:text-white resize-none"
                   placeholder="Your message here..."
@@ -154,8 +235,17 @@ export default function ContactPage() {
                 disabled={loading}
                 className="w-full py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-blue-500/20 hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
               >
-                {loading ? 'Sending...' : 'Send Message'}
-                {!loading && <Send className="w-5 h-5" />}
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    Send Message
+                    <Send className="w-5 h-5" />
+                  </>
+                )}
               </button>
             </form>
           </motion.div>

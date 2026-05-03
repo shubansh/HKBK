@@ -31,6 +31,7 @@ import AdminSettings      from './pages/admin/AdminSettings';
 import AdminPosts         from './pages/admin/AdminPosts';
 import AdminPeople        from './pages/admin/AdminPeople';
 import AdminFaculty       from './pages/admin/AdminFaculty';
+import AdminMessages      from './pages/admin/AdminMessages';
 
 // ─── Shared UI Pieces ──────────────────────────────────────────────────────
 
@@ -184,7 +185,7 @@ export default function App() {
             <Route path="settings"        element={<AdminSettings />} />
             <Route path="posts"           element={<AdminPosts />} />
             <Route path="mentorship"      element={<MentorshipPage />} />
-            <Route path="messages"        element={<MessagesPage />} />
+            <Route path="messages"        element={<AdminMessages />} />
           </Route>
 
           {/* ── User Dashboard routes ─────────────────────────────── */}

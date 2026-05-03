@@ -46,6 +46,7 @@ const NAV_CONFIG = {
     { name: 'Faculty (People)',   path: '/people',             icon: Users },
     { name: 'Gallery',            path: '/gallery',            icon: Image },
     { name: 'Events',             path: '/events',             icon: Calendar },
+    { name: 'Inbound Messages',   path: '/messages',           icon: MessageSquare },
     { name: 'Settings',           path: '/settings',           icon: Settings },
   ],
 };
