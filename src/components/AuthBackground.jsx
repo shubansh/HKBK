@@ -21,7 +21,7 @@ export default function AuthBackground({ title, subtitle }) {
         <img
           src={imageUrl}
           alt="HKBK Campus"
-          className="absolute inset-0 w-full h-full object-cover z-0"
+          className="absolute inset-0 w-full h-full object-cover z-0 blur-[2px] scale-105"
           loading="eager"
           onError={(e) => { e.target.style.display = 'none'; }}
         />
@@ -33,11 +33,13 @@ export default function AuthBackground({ title, subtitle }) {
       )}
 
       {/* Dark overlay — z-10 above image, below content */}
-      <div className="absolute inset-0 z-10 bg-gradient-to-br from-blue-900/90 via-indigo-900/85 to-purple-900/90" />
+      <div className="absolute inset-0 z-10 bg-slate-950/40 backdrop-blur-[1px]" />
+      <div className="absolute inset-0 z-10 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent" />
+      <div className="absolute inset-0 z-10 bg-gradient-to-br from-blue-600/30 via-transparent to-transparent" />
 
       {/* Decorative blur orbs — z-10 */}
-      <div className="absolute top-[-10%] left-[-10%] w-80 h-80 bg-blue-500 rounded-full blur-3xl opacity-20 pointer-events-none z-10" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-80 h-80 bg-purple-500 rounded-full blur-3xl opacity-20 pointer-events-none z-10" />
+      <div className="absolute top-[-10%] left-[-10%] w-80 h-80 bg-blue-500 rounded-full blur-[100px] opacity-20 pointer-events-none z-10" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-80 h-80 bg-purple-500 rounded-full blur-[100px] opacity-20 pointer-events-none z-10" />
 
       {/* Content */}
       <div className="relative z-20 flex flex-col justify-between w-full p-10 text-white">

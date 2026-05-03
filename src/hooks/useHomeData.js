@@ -190,8 +190,16 @@ export function useGalleryImages(limit = 8, category = 'all') {
 
         if (category !== 'all') query = query.eq('category', category);
 
-        const { data } = await query;
-        if (!cancelled) { setImages(data ?? []); setLoading(false); }
+        const { data, error } = await query;
+        if (!cancelled) { 
+          if (error) {
+            console.error('[useGalleryImages] Error:', error);
+            setImages([]);
+          } else {
+            setImages(Array.isArray(data) ? data : []); 
+          }
+          setLoading(false); 
+        }
       } catch (_) {
         if (!cancelled) setLoading(false);
       }

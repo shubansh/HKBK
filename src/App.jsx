@@ -13,6 +13,7 @@ import Signup         from './pages/Signup';
 import AlumniDirectory from './pages/AlumniDirectory';
 import JobsPage       from './pages/JobsPage';
 import EventsPage     from './pages/EventsPage';
+import ContactPage    from './pages/ContactPage';
 
 // Dashboard pages
 import StudentDashboard from './pages/student/StudentDashboard';
@@ -163,6 +164,8 @@ export default function App() {
             <Route path="/directory" element={<AlumniDirectory />} />
             <Route path="/jobs"      element={<JobsPage />} />
             <Route path="/events"    element={<EventsPage />} />
+            <Route path="/mentorship" element={<MentorshipPage />} />
+            <Route path="/contact"    element={<ContactPage />} />
           </Route>
 
           {/* ── Admin routes ─────────────────────────────────────── */}

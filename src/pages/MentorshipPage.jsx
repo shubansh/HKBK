@@ -19,18 +19,20 @@ export default function MentorshipPage() {
     async function init() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-        setCurrentUser(session.user);
+        setCurrentUser(session?.user || null);
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+        let userRole = 'student';
+        if (session?.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
 
-        setCurrentUserProfile(profile);
-        const userRole = profile?.role || 'student';
-        setRole(userRole);
+          setCurrentUserProfile(profile);
+          userRole = profile?.role || 'student';
+          setRole(userRole);
+        }
 
         if (userRole === 'student') {
           // Fetch approved alumni
@@ -41,7 +43,7 @@ export default function MentorshipPage() {
             .eq('is_approved', true);
             
           if (!error && mentors) setData(mentors);
-        } else if (userRole === 'alumni') {
+        } else if (userRole === 'alumni' && session?.user) {
           // Fetch mentorship requests
           const { data: requests, error } = await supabase
             .from('mentorship_requests')
@@ -73,7 +75,11 @@ export default function MentorshipPage() {
   const handleRequestMentorship = async (mentorId) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        toast.error('Please login to request mentorship');
+        navigate('/login');
+        return;
+      }
       
       // Insert a mentorship request to unlock RLS visibility
       await supabase.from('mentorship_requests').insert({

@@ -56,16 +56,26 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
           <div className="flex items-center">
-            <Link to="/" className="flex items-center gap-2 group">
-              <img 
-                src={theme === 'dark' ? '/logos/college/logo-white.png' : '/logos/college/logo.png'} 
-                alt="HKBK College Logo" 
-                className="h-8 w-auto object-contain group-hover:scale-105 transition-transform duration-300"
-                onError={(e) => {
-                  e.target.onerror = null; 
-                  e.target.src = "https://placehold.co/200x50/2563eb/ffffff?text=HKBK+Logo";
-                }}
-              />
+            <Link to="/" className="flex items-center gap-3 group">
+              <div className="relative">
+                <img 
+                  src={theme === 'dark' ? '/logos/college/logo-white.png' : '/logos/college/logo.png'} 
+                  alt="HKBK Logo" 
+                  className="h-10 w-auto object-contain group-hover:scale-110 transition-transform duration-500"
+                  onError={(e) => {
+                    e.target.onerror = null; 
+                    e.target.src = "https://placehold.co/50x50/2563eb/ffffff?text=H";
+                  }}
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xl font-black tracking-tighter text-gray-900 dark:text-white leading-none">
+                  HKBK <span className="text-blue-600 dark:text-blue-500">Connect</span>
+                </span>
+                <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mt-1">
+                  Alumni Network
+                </span>
+              </div>
             </Link>
           </div>
           

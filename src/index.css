@@ -4,6 +4,17 @@
 
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900 dark:bg-slate-900 dark:text-white transition-colors duration-300;
+    @apply bg-white text-gray-900 dark:bg-[#020617] dark:text-white transition-colors duration-300 min-h-screen;
   }
 }
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+

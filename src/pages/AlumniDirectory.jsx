@@ -146,15 +146,15 @@ export default function AlumniDirectory() {
 
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredAlumni.map((person) => (
+        {filteredAlumni?.map((person) => (
           <div
-            key={person.id}
-            className="group bg-white dark:bg-slate-800/80 border border-gray-200/80 dark:border-slate-700/60 rounded-2xl p-6 hover:border-blue-400/60 dark:hover:border-blue-500/40 hover:shadow-xl hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 backdrop-blur-sm"
+            key={person?.id}
+            className="group bg-white dark:bg-slate-900/50 border border-gray-100 dark:border-slate-800 rounded-[2.5rem] p-8 hover:border-blue-500/50 hover:shadow-2xl hover:shadow-blue-500/5 hover:-translate-y-1 transition-all duration-500 backdrop-blur-sm"
           >
             {/* Avatar + Name */}
-            <div className="flex items-start gap-4 mb-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/40 dark:to-indigo-900/40 flex items-center justify-center shrink-0 overflow-hidden group-hover:ring-2 group-hover:ring-blue-500/50 transition-all">
-                {person.avatar_url ? (
+            <div className="flex items-start gap-5 mb-6">
+              <div className="w-20 h-20 rounded-[1.5rem] bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center shrink-0 overflow-hidden border border-blue-100/50 dark:border-white/5 transition-transform group-hover:scale-105">
+                {person?.avatar_url ? (
                   <img
                     src={person.avatar_url}
                     alt={person.full_name}
@@ -163,52 +163,50 @@ export default function AlumniDirectory() {
                     onError={e => {
                       e.target.onerror = null;
                       e.target.style.display = 'none';
-                      e.target.parentElement.innerHTML = `<span class="text-2xl font-black text-blue-600 dark:text-blue-400">${person.full_name?.charAt(0)?.toUpperCase() ?? '?'}</span>`;
+                      e.target.nextSibling.style.display = 'flex';
                     }}
                   />
-                ) : (
-                  <span className="text-2xl font-black text-blue-600 dark:text-blue-400">
-                    {person.full_name?.charAt(0)?.toUpperCase() ?? '?'}
+                ) : null}
+                <div className={`${person?.avatar_url ? 'hidden' : 'flex'} w-full h-full items-center justify-center`}>
+                   <span className="text-3xl font-black text-blue-600 dark:text-blue-400 uppercase">
+                    {person?.full_name?.charAt(0) || '?'}
                   </span>
-                )}
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
-                  {person.full_name}
+              <div className="flex-1 min-w-0 pt-1">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
+                  {person?.full_name || 'Alumni Member'}
                 </h3>
-                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mt-0.5">
-                  {person.passout_year ? `Batch ${person.passout_year}` : person.graduation_year ? `Class of ${person.graduation_year}` : 'Alumni'}
+                <p className="text-sm font-black text-blue-600 dark:text-blue-400 mt-1 uppercase tracking-widest">
+                  {person?.passout_year ? `Batch ${person.passout_year}` : person?.graduation_year ? `Class of ${person.graduation_year}` : 'Alumni'}
                 </p>
-                {person.course_name && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1 truncate">
-                    <BookOpen className="w-3 h-3 shrink-0" /> {person.course_name}
-                  </p>
+                {person?.course_name && (
+                   <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-50 dark:bg-slate-800 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <BookOpen className="w-3 h-3" /> {person.course_name}
+                  </div>
                 )}
               </div>
             </div>
 
             {/* Details */}
-            <div className="space-y-1.5 text-sm text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-slate-700/60 pt-4 mt-2">
-              {person.job_title || person.company ? (
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-blue-500 shrink-0" />
+            <div className="space-y-3 pt-6 border-t border-gray-50 dark:border-slate-800/50">
+              {(person?.job_title || person?.company) && (
+                <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400 font-medium">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-500">
+                    <Building2 className="w-4 h-4" />
+                  </div>
                   <span className="truncate">
-                    {person.job_title ? `${person.job_title}` : ''}
-                    {person.job_title && person.company ? ' at ' : ''}
-                    {person.company ?? ''}
+                    {person.job_title} {person.job_title && person.company ? '@' : ''} {person.company}
                   </span>
                 </div>
-              ) : null}
-              {person.location && (
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-blue-500 shrink-0" />
+              )}
+              {person?.location && (
+                <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400 font-medium">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                    <MapPin className="w-4 h-4" />
+                  </div>
                   <span className="truncate">{person.location}</span>
                 </div>
-              )}
-              {person.bio && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 line-clamp-2 pt-1 italic">
-                  {person.bio}
-                </p>
               )}
             </div>
           </div>
