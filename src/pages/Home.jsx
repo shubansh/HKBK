@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, 
   Briefcase, 
   GraduationCap, 
   Calendar, 
+  ArrowLeft,
   ArrowRight, 
   ChevronRight, 
   Quote, 
@@ -18,7 +19,8 @@ import {
   BookOpen,
   CheckCircle2,
   Trophy,
-  Target
+  Target,
+  Clock
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { 
@@ -81,6 +83,32 @@ export default function Home() {
   const stats = usePlatformStats() || { alumni: 0, jobs: 0, mentors: 0, events: 0, loading: true };
 
   const [lightboxIndex, setLightboxIndex] = useState(null);
+  const galleryRef = useRef(null);
+  const [isHovering, setIsHovering] = useState(false);
+
+  const scroll = useCallback((direction) => {
+    if (!galleryRef.current) return;
+    const { scrollLeft, clientWidth } = galleryRef.current;
+    const scrollAmount = clientWidth * 0.8;
+    galleryRef.current.scrollTo({
+      left: direction === 'left' ? scrollLeft - scrollAmount : scrollLeft + scrollAmount,
+      behavior: 'smooth'
+    });
+  }, []);
+
+  useEffect(() => {
+    if (isHovering || galleryLoading) return;
+    const interval = setInterval(() => {
+      if (!galleryRef.current) return;
+      const { scrollLeft, scrollWidth, clientWidth } = galleryRef.current;
+      if (scrollLeft + clientWidth >= scrollWidth - 10) {
+        galleryRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+      } else {
+        scroll('right');
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [isHovering, galleryLoading, scroll]);
 
   return (
     <div className="overflow-x-hidden bg-white dark:bg-[#020617] transition-colors duration-300">
@@ -278,7 +306,11 @@ export default function Home() {
       </section>
 
       {/* ─── Campus Gallery ────────────────────────────────────────────────── */}
-      <section className="py-32 relative overflow-hidden">
+      <section 
+        className="py-32 relative overflow-hidden"
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="flex flex-col md:flex-row justify-between items-end gap-6 mb-16">
             <div className="space-y-4">
@@ -287,9 +319,27 @@ export default function Home() {
                 Glimpses of our vibrant campus, state-of-the-art labs, and memorable events.
               </p>
             </div>
-            <Link to="/gallery" className="group flex items-center gap-2 text-blue-600 font-black hover:gap-3 transition-all uppercase text-xs tracking-widest">
-              View All Moments <ChevronRight className="w-5 h-5" />
-            </Link>
+            
+            <div className="flex items-center gap-6">
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => scroll('left')}
+                  className="w-12 h-12 rounded-full border border-gray-200 dark:border-white/10 flex items-center justify-center hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all active:scale-90"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <button 
+                  onClick={() => scroll('right')}
+                  className="w-12 h-12 rounded-full border border-gray-200 dark:border-white/10 flex items-center justify-center hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all active:scale-90"
+                >
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="h-8 w-px bg-gray-200 dark:bg-white/10 hidden md:block" />
+              <Link to="/gallery" className="group flex items-center gap-2 text-blue-600 font-black hover:gap-3 transition-all uppercase text-xs tracking-widest">
+                View All <ChevronRight className="w-5 h-5" />
+              </Link>
+            </div>
           </div>
 
           {galleryLoading ? (
@@ -297,12 +347,15 @@ export default function Home() {
               {[...Array(4)].map((_, i) => <Skeleton key={i} className="w-[350px] h-[450px] rounded-[2rem] shrink-0" />)}
             </div>
           ) : (
-            <div className="flex gap-6 overflow-x-auto pb-12 custom-scrollbar snap-x no-scrollbar">
+            <div 
+              ref={galleryRef}
+              className="flex gap-6 overflow-x-auto pb-12 custom-scrollbar snap-x snap-mandatory no-scrollbar scroll-smooth"
+            >
               {gallery?.map((img, idx) => (
                 <motion.div
                   key={img.id}
                   whileHover={{ y: -10 }}
-                  className="min-w-[300px] md:min-w-[400px] h-[500px] rounded-[3rem] overflow-hidden group relative cursor-pointer snap-start border border-gray-100 dark:border-white/5 shadow-xl"
+                  className="min-w-[300px] md:min-w-[400px] h-[500px] rounded-[3rem] overflow-hidden group relative cursor-pointer snap-start border border-gray-100 dark:border-white/5 shadow-xl flex-shrink-0"
                   onClick={() => setLightboxIndex(idx)}
                 >
                   <img 
